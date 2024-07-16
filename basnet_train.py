@@ -8,6 +8,7 @@ from torchvision import transforms
 import torch.optim as optim
 
 import glob
+import datetime
 from os.path import join, sep, exists, basename
 
 from data_loader import RescaleT
@@ -86,8 +87,8 @@ def muti_bce_loss_fusion(d0, d1, d2, d3, d4, d5, d6, d7, labels_v):
 # ------- 2. set the directory of training dataset --------
 
 data_dir = join('.', 'FIVES-dataset')
-tra_image_dir = join('train', 'Ground truth')
-tra_label_dir = join('train', 'Original')
+train_image_dir = join('train', 'Images')
+train_label_dir = join('train', 'Labels')
 
 image_ext = '.png'
 label_ext = '.png'
@@ -99,7 +100,7 @@ epoch_num = 10000
 batch_size_train = 8
 train_num = 0 
 
-train_img_path_list = glob.glob(join(data_dir, tra_image_dir, '*' + image_ext))
+train_img_path_list = glob.glob(join(data_dir, train_image_dir, '*' + image_ext))
 
 # 生成训练标签文件名列表
 # 列表中每个元素是对应训练图片的标签文件的完整路径
@@ -111,7 +112,7 @@ for img_path in train_img_path_list:  # 遍历训练图片路径列表
     file_name_no_ext = '.'.join(img_name.split(".")[:-1])
 
     # 将标签文件的路径拼接成完整路径，并添加到标签文件名列表中，并去除无效的文件
-    tra_lbl_path = join(data_dir, tra_label_dir, file_name_no_ext + label_ext)
+    tra_lbl_path = join(data_dir, train_label_dir, file_name_no_ext + label_ext)
     if exists(tra_lbl_path):
         train_label_path_list.append(tra_lbl_path)
     else:
@@ -170,7 +171,7 @@ optimizer = optim.Adam(
 # ------- 5. training process --------
 print("---start training...")
 net.load_state_dict(torch.load(join('.', 'saved_models', 'basnet_bsi', 'basnet_bsi_2.pth')))
-writer = SummaryWriter()
+writer = SummaryWriter(join('.', 'runs', datetime.datetime.now().strftime('%Y%m%d-%H%M%S')))
 ite_num = 0
 if __name__ == "__main__":
     for epoch in range(epoch_num):
@@ -202,13 +203,11 @@ if __name__ == "__main__":
             loss.backward()
             optimizer.step()
 
-            writer.add_scalar("Loss/train", loss, epoch)
-
             # del temporary outputs and loss
             # del d0, d1, d2, d3, d4, d5, d6, d7, loss2, loss
 
             print(
-                "[epoch: %3d/%3d, batch: %5d/%5d, ite: %d] train loss: %3f".format(
+                "[epoch: {:3d}/{:3d}, batch: {:5d}/{:5d}, ite: {:d}] train loss: {:3f}".format(
                     epoch + 1, 
                     epoch_num, 
                     (i + 1) * batch_size_train, 
@@ -222,5 +221,6 @@ if __name__ == "__main__":
 
                 torch.save(net.state_dict(), model_dir + "basnet_bsi_itr_%d_train_%3f.pth" % (ite_num, loss))
                 net.train()  # resume train
+        writer.add_scalar("Loss/train", loss, epoch)
 
     print('-------------Congratulations! Training Done!!!-------------')

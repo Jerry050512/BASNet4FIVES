@@ -1,6 +1,7 @@
 __pycache__/
 .vscode/
 saved_models/
+runs/
 
 *dataset*
 test*
