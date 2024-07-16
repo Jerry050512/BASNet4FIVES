@@ -1,0 +1,7 @@
+__pychache__/
+.vscode/
+saved_models/
+
+*dataset*
+test*
+

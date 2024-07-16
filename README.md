@@ -1,0 +1,3 @@
+# 训练在FIVES数据集上的BASNet
+
+本项目是一个训练在FIVES数据集上的BASNet，微调过部分代码来适应新的pytorch API。
