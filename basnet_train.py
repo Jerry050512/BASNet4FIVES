@@ -171,7 +171,8 @@ optimizer = optim.Adam(
 # ------- 5. training process --------
 print("---start training...")
 net.load_state_dict(torch.load(join('.', 'saved_models', 'basnet_bsi', 'basnet_bsi_2.pth')))
-writer = SummaryWriter(join('.', 'runs', datetime.datetime.now().strftime('%Y%m%d-%H%M%S')))
+if __name__ == '__main__':
+    writer = SummaryWriter(join('.', 'runs', datetime.datetime.now().strftime('%Y%m%d-%H%M%S')))
 ite_num = 0
 if __name__ == "__main__":
     for epoch in range(epoch_num):
