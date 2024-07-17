@@ -209,9 +209,10 @@ if __name__ == '__main__':
             )
 
             if ite_num % 1000 == 0:  # save model every 2000 iterations
+                time = datetime.datetime.now().strftime('%Y%m%d-%H%M%S')
                 torch.save(
                     net.state_dict(), 
-                    f"{model_dir}basnet_bsi_itr_{ite_num}_train_{loss.item():.3f}.pth"
+                    f"{model_dir}basnet_bsi_itr_{ite_num}_train_{loss.item():.3f}-{time}.pth"
                 )
         writer.add_scalar("Loss/train", loss, epoch)
 
