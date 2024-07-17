@@ -1,23 +1,18 @@
 import torch
-import torchvision
 from torch.autograd import Variable
+from torch.utils.tensorboard import SummaryWriter
 import torch.nn as nn
-import torch.nn.functional as F
 
-from torch.utils.data import Dataset, DataLoader
-from torchvision import transforms, utils
+from torch.utils.data import DataLoader
+from torchvision import transforms
 import torch.optim as optim
-import torchvision.transforms as standard_transforms
 
-import numpy as np
 import glob
-from os.path import join, sep, exists
+import datetime
+from os.path import join, sep, exists, basename
 
-from data_loader import Rescale
 from data_loader import RescaleT
 from data_loader import RandomCrop
-from data_loader import CenterCrop
-from data_loader import ToTensor
 from data_loader import ToTensorLab
 from data_loader import SalObjDataset
 
@@ -92,8 +87,8 @@ def muti_bce_loss_fusion(d0, d1, d2, d3, d4, d5, d6, d7, labels_v):
 # ------- 2. set the directory of training dataset --------
 
 data_dir = join('.', 'FIVES-dataset')
-tra_image_dir = join('train', 'Ground truth')
-tra_label_dir = join('train', 'Original')
+train_image_dir = join('train', 'Images')
+train_label_dir = join('train', 'Labels')
 
 image_ext = '.png'
 label_ext = '.png'
@@ -101,43 +96,41 @@ label_ext = '.png'
 model_dir = join('.', 'saved_models', 'basnet_bsi/')
 
 
-epoch_num = 100000
-batch_size_train = 8 
-batch_size_val = 1
+epoch_num = 10000
+batch_size_train = 8
 train_num = 0 
-val_num = 0
 
-tra_img_path_list = glob.glob(join(data_dir, tra_image_dir, '*' + image_ext))
+train_img_path_list = glob.glob(join(data_dir, train_image_dir, '*' + image_ext))
 
 # 生成训练标签文件名列表
 # 列表中每个元素是对应训练图片的标签文件的完整路径
-tra_lbl_path_list = []
-for img_path in tra_img_path_list:  # 遍历训练图片路径列表
-    img_name = img_path.split(sep)[-1]  # 从图片路径中提取文件名
+train_label_path_list = []
+for img_path in train_img_path_list:  # 遍历训练图片路径列表
+    img_name = basename(img_path)  # 从图片路径中提取文件名
 
     # 构造保存图像的文件名
     file_name_no_ext = '.'.join(img_name.split(".")[:-1])
 
     # 将标签文件的路径拼接成完整路径，并添加到标签文件名列表中，并去除无效的文件
-    tra_lbl_path = join(data_dir, tra_label_dir, file_name_no_ext + label_ext)
+    tra_lbl_path = join(data_dir, train_label_dir, file_name_no_ext + label_ext)
     if exists(tra_lbl_path):
-        tra_lbl_path_list.append(tra_lbl_path)
+        train_label_path_list.append(tra_lbl_path)
     else:
-        tra_img_path_list.remove(img_path)
+        train_img_path_list.remove(img_path)
 
 print("---")
-print("train images: ", len(tra_img_path_list))
-print("train labels: ", len(tra_lbl_path_list))
+print("train images: ", len(train_img_path_list))
+print("train labels: ", len(train_label_path_list))
 print("---")
 
 
-train_num = len(tra_img_path_list)
+train_num = len(train_img_path_list)
 
 # Salient Object Detection Dataset
 # 显著性对象检测数据集
 salobj_dataset = SalObjDataset(
-    img_name_list=tra_img_path_list,
-    lbl_name_list=tra_lbl_path_list,
+    img_name_list=train_img_path_list,
+    lbl_name_list=train_label_path_list,
     transform=transforms.Compose([
         RescaleT(256),
         RandomCrop(224),
@@ -148,14 +141,14 @@ salobj_dataloader = DataLoader(
     salobj_dataset, 
     batch_size=batch_size_train, 
     shuffle=True, 
-    num_workers=1
+    num_workers=4
 )
 
 # ------- 3. define model --------
 # define the net
+device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 net = BASNet(3, 1)
-if torch.cuda.is_available():
-    net.cuda()
+net.to(device)
 
 # ------- 4. define optimizer --------
 print("---define optimizer...")
@@ -176,59 +169,50 @@ optimizer = optim.Adam(
 )
 
 # ------- 5. training process --------
-print("---start training...")
-net.load_state_dict(torch.load(join('.', 'saved_models', 'basnet_bsi', 'basnet.pth')))
-ite_num = 0
-running_loss = 0.0
-running_tar_loss = 0.0
-avg_loss_batch_counter = 0
-if __name__ == "__main__":
-    for epoch in range(0, epoch_num):
+if __name__ == '__main__':
+    print("---start training...")
+    print("---Loading checkpoint...")
+    # net.load_state_dict(torch.load(join('.', 'saved_models', 'basnet_bsi', 'basnet_bsi_5.pth')))
+    writer = SummaryWriter(join('.', 'runs', datetime.datetime.now().strftime('%Y%m%d-%H%M%S')))
+    ite_num = 0
+
+    for epoch in range(epoch_num):
         net.train()
 
         for i, data in enumerate(salobj_dataloader):
             ite_num += 1
-            avg_loss_batch_counter += 1
 
-            inputs, labels = data['image'], data['label']
-
-            inputs = inputs.type(torch.FloatTensor)
-            labels = labels.type(torch.FloatTensor)
-
-            # wrap them in Variable
-            if torch.cuda.is_available():
-                inputs_v = Variable(inputs.cuda(), requires_grad=False)
-                labels_v = Variable(labels.cuda(), requires_grad=False)
-            else:
-                inputs_v = Variable(inputs, requires_grad=False)
-                labels_v = Variable(labels, requires_grad=False)
+            inputs, labels = data['image'].to(device, dtype=torch.float), data['label'].to(device, dtype=torch.float)
 
             # y zero the parameter gradients
             optimizer.zero_grad()
 
             # forward + backward + optimize
-            d0, d1, d2, d3, d4, d5, d6, d7 = net(inputs_v)
-            loss2, loss = muti_bce_loss_fusion(d0, d1, d2, d3, d4, d5, d6, d7, labels_v)
+            d0, d1, d2, d3, d4, d5, d6, d7 = net(inputs)
+            loss2, loss = muti_bce_loss_fusion(d0, d1, d2, d3, d4, d5, d6, d7, labels)
 
             loss.backward()
             optimizer.step()
 
-            # # print statistics
-            running_loss += loss.item()
-            running_tar_loss += loss2.item()
-
             # del temporary outputs and loss
             # del d0, d1, d2, d3, d4, d5, d6, d7, loss2, loss
 
-            print("[epoch: %3d/%3d, batch: %5d/%5d, ite: %d] train loss: %3f, tar: %3f " % (
-            epoch + 1, epoch_num, (i + 1) * batch_size_train, train_num, ite_num, running_loss / avg_loss_batch_counter, running_tar_loss / avg_loss_batch_counter))
+            print(
+                "[epoch: {:3d}/{:3d}, batch: {:5d}/{:5d}, ite: {:d}] train loss: {:3f}".format(
+                    epoch + 1, 
+                    epoch_num, 
+                    (i + 1) * batch_size_train, 
+                    train_num, 
+                    ite_num, 
+                    loss.item()
+                )
+            )
 
-            if ite_num % 2000 == 0:  # save model every 2000 iterations
-
-                torch.save(net.state_dict(), model_dir + "basnet_bsi_itr_%d_train_%3f_tar_%3f.pth" % (ite_num, running_loss / avg_loss_batch_counter, running_tar_loss / avg_loss_batch_counter))
-                running_loss = 0.0
-                running_tar_loss = 0.0
-                net.train()  # resume train
-                avg_loss_batch_counter = 0
+            if ite_num % 1000 == 0:  # save model every 2000 iterations
+                torch.save(
+                    net.state_dict(), 
+                    f"{model_dir}basnet_bsi_itr_{ite_num}_train_{loss.item():.3f}.pth"
+                )
+        writer.add_scalar("Loss/train", loss, epoch)
 
     print('-------------Congratulations! Training Done!!!-------------')

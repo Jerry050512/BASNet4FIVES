@@ -1,7 +1,9 @@
-__pychache__/
+__pycache__/
 .vscode/
 saved_models/
+runs/
 
 *dataset*
 test*
 
+!expand_dataset.py
