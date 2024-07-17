@@ -146,9 +146,9 @@ salobj_dataloader = DataLoader(
 
 # ------- 3. define model --------
 # define the net
+device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 net = BASNet(3, 1)
-if torch.cuda.is_available():
-    net.cuda()
+net.to(device)
 
 # ------- 4. define optimizer --------
 print("---define optimizer...")
@@ -169,37 +169,27 @@ optimizer = optim.Adam(
 )
 
 # ------- 5. training process --------
-print("---start training...")
-net.load_state_dict(torch.load(join('.', 'saved_models', 'basnet_bsi', 'basnet_bsi_2.pth')))
 if __name__ == '__main__':
+    print("---start training...")
+    print("---Loading checkpoint...")
+    # net.load_state_dict(torch.load(join('.', 'saved_models', 'basnet_bsi', 'basnet_bsi_5.pth')))
     writer = SummaryWriter(join('.', 'runs', datetime.datetime.now().strftime('%Y%m%d-%H%M%S')))
-ite_num = 0
-if __name__ == "__main__":
+    ite_num = 0
+
     for epoch in range(epoch_num):
         net.train()
 
         for i, data in enumerate(salobj_dataloader):
             ite_num += 1
 
-            inputs, labels = data['image'], data['label']
-
-            inputs = inputs.type(torch.FloatTensor)
-            labels = labels.type(torch.FloatTensor)
-
-            # wrap them in Variable
-            if torch.cuda.is_available():
-                inputs_v = Variable(inputs.cuda(), requires_grad=False)
-                labels_v = Variable(labels.cuda(), requires_grad=False)
-            else:
-                inputs_v = Variable(inputs, requires_grad=False)
-                labels_v = Variable(labels, requires_grad=False)
+            inputs, labels = data['image'].to(device, dtype=torch.float), data['label'].to(device, dtype=torch.float)
 
             # y zero the parameter gradients
             optimizer.zero_grad()
 
             # forward + backward + optimize
-            d0, d1, d2, d3, d4, d5, d6, d7 = net(inputs_v)
-            loss2, loss = muti_bce_loss_fusion(d0, d1, d2, d3, d4, d5, d6, d7, labels_v)
+            d0, d1, d2, d3, d4, d5, d6, d7 = net(inputs)
+            loss2, loss = muti_bce_loss_fusion(d0, d1, d2, d3, d4, d5, d6, d7, labels)
 
             loss.backward()
             optimizer.step()
@@ -219,9 +209,10 @@ if __name__ == "__main__":
             )
 
             if ite_num % 1000 == 0:  # save model every 2000 iterations
-
-                torch.save(net.state_dict(), model_dir + "basnet_bsi_itr_%d_train_%3f.pth" % (ite_num, loss))
-                net.train()  # resume train
+                torch.save(
+                    net.state_dict(), 
+                    f"{model_dir}basnet_bsi_itr_{ite_num}_train_{loss.item():.3f}.pth"
+                )
         writer.add_scalar("Loss/train", loss, epoch)
 
     print('-------------Congratulations! Training Done!!!-------------')

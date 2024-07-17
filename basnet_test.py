@@ -82,7 +82,7 @@ if __name__ == '__main__':
 	
 	image_dir = join('.', 'FIVES-dataset', 'test', 'Original')
 	prediction_dir = join('.', 'test_results')
-	model_dir = join('.', 'saved_models', 'basnet_bsi', 'basnet_bsi_2.pth')
+	model_dir = join('.', 'saved_models', 'basnet_bsi', 'basnet_bsi_5.pth')
 	
 	img_name_list = glob.glob(join(image_dir, '*.png'))
 	
