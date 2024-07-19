@@ -96,7 +96,7 @@ label_ext = '.png'
 model_dir = join('.', 'saved_models', 'basnet_bsi/')
 
 
-epoch_num = 10000
+epoch_num = 140
 batch_size_train = 8
 train_num = 0 
 
@@ -146,7 +146,7 @@ salobj_dataloader = DataLoader(
 
 # ------- 3. define model --------
 # define the net
-device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+device = torch.device("cuda:2" if torch.cuda.is_available() else "cpu")
 net = BASNet(3, 1)
 net.to(device)
 
@@ -162,7 +162,7 @@ print("---define optimizer...")
 # weight_decay=0: 权重衰减（L2正则化）的系数，用于防止过拟合，默认为0表示不使用L2正则化
 optimizer = optim.Adam(
     net.parameters(), 
-    lr=0.001, 
+    lr=1e-4, 
     betas=(0.9, 0.999), 
     eps=1e-08, 
     weight_decay=0
@@ -172,8 +172,10 @@ optimizer = optim.Adam(
 if __name__ == '__main__':
     print("---start training...")
     print("---Loading checkpoint...")
+    time = datetime.datetime.now().strftime('%Y%m%d-%H%M%S')
+    identity = hex(hash(time)).upper()[-5:]
     # net.load_state_dict(torch.load(join('.', 'saved_models', 'basnet_bsi', 'basnet_bsi_5.pth')))
-    writer = SummaryWriter(join('.', 'runs', datetime.datetime.now().strftime('%Y%m%d-%H%M%S')))
+    writer = SummaryWriter(join('.', 'runs', f"{time}-{identity}"))
     ite_num = 0
 
     for epoch in range(epoch_num):
@@ -212,7 +214,7 @@ if __name__ == '__main__':
                 time = datetime.datetime.now().strftime('%Y%m%d-%H%M%S')
                 torch.save(
                     net.state_dict(), 
-                    f"{model_dir}basnet_bsi_itr_{ite_num}_train_{loss.item():.3f}-{time}.pth"
+                    f"{model_dir}basnet_{identity}_itr_{ite_num}_train_{loss.item():.3f}-{time}.pth"
                 )
         writer.add_scalar("Loss/train", loss, epoch)
 
