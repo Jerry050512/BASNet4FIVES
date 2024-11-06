@@ -21,9 +21,19 @@ from model import BASNet
 import pytorch_ssim
 import pytorch_iou
 
+DATASET = 'SSP2000'
+MODEL_NAME = 'BASNet'
+EPOCH_SCALE = 1
+MODEL_CODE = f'ssp'
+MODE = 'train'
+CUDA_NUM = 0
+IMG_EXT = '.jpg'
+
+dataset_path = f'/home/zhengang/dataset/{DATASET}'
+
 # ------- 1. define loss function --------
 
-bce_loss = nn.BCELoss(reduction='mean')
+bce_loss = nn.BCEWithLogitsLoss(reduction='mean')
 ssim_loss = pytorch_ssim.SSIM(window_size=11,reduction='mean')
 iou_loss = pytorch_iou.IOU(reduction='mean')
 
@@ -86,17 +96,17 @@ def muti_bce_loss_fusion(d0, d1, d2, d3, d4, d5, d6, d7, labels_v):
 
 # ------- 2. set the directory of training dataset --------
 
-data_dir = join('.', 'FIVES-dataset')
-train_image_dir = join('train', 'Images')
-train_label_dir = join('train', 'Labels')
+data_dir = dataset_path
+train_image_dir = 'Img_train'
+train_label_dir = 'GT_train'
 
-image_ext = '.png'
+image_ext = IMG_EXT
 label_ext = '.png'
 
-model_dir = join('.', 'saved_models', 'basnet_bsi/')
+model_dir = join('.', 'saved_models/')
 
 
-epoch_num = 10000
+epoch_num = 320         # According to the paper, 400k iter * batch size 8 / DUTS dataset size 10000
 batch_size_train = 8
 train_num = 0 
 
@@ -146,7 +156,7 @@ salobj_dataloader = DataLoader(
 
 # ------- 3. define model --------
 # define the net
-device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+device = torch.device(f"cuda:{CUDA_NUM}" if torch.cuda.is_available() else "cpu")
 net = BASNet(3, 1)
 net.to(device)
 
@@ -208,12 +218,13 @@ if __name__ == '__main__':
                 )
             )
 
-            if ite_num % 1000 == 0:  # save model every 2000 iterations
-                time = datetime.datetime.now().strftime('%Y%m%d-%H%M%S')
-                torch.save(
-                    net.state_dict(), 
-                    f"{model_dir}basnet_bsi_itr_{ite_num}_train_{loss.item():.3f}-{time}.pth"
-                )
+        # if ite_num % 1000 == 0:  # save model every 2000 iterations
+        time = datetime.datetime.now().strftime('%Y%m%d-%H%M%S')
+        print(f'{time} - Saving model...')
+        torch.save(
+            net.state_dict(), 
+            f"{model_dir}{MODEL_CODE}-{epoch+1}.pth"
+        )
         writer.add_scalar("Loss/train", loss, epoch)
 
     print('-------------Congratulations! Training Done!!!-------------')

@@ -12,7 +12,7 @@ from torchvision import transforms#, utils
 import numpy as np
 from PIL import Image
 import glob
-from os.path import join, sep
+from os.path import join, sep, basename, splitext
 from pathlib import Path
 
 from data_loader import RescaleT
@@ -22,6 +22,21 @@ from data_loader import ToTensorLab
 from data_loader import SalObjDataset
 
 from model import BASNet
+
+DATASET = 'SSP2000'
+MODEL_NAME = 'BASNet'
+EPOCH_SCALE = 1
+MODEL_CODE = f'ssp'
+MODE = 'test'
+CUDA_NUM = 1
+IMG_EXT = '.jpg'
+MATCH_CASE = f'{MODEL_CODE}-*'
+
+dataset_path = f'/home/zhengang/dataset/{DATASET}'
+target_path = f'/home/zhengang/dataset/prediction/{MODEL_NAME}/{DATASET}/{MODE}'
+os.makedirs(target_path, exist_ok=True)
+
+os.system(f'cp {dataset_path}/GT_{MODE}/*.png {target_path}')
 
 def normalize_prediction(d):
     """
@@ -41,7 +56,7 @@ def normalize_prediction(d):
 
     return dn
 
-def save_output(image_path, pred, d_dir):
+def save_output(image_path, pred, d_dir, model_code='p-1'):
     """
     保存预测结果的图像。
 
@@ -75,60 +90,65 @@ def save_output(image_path, pred, d_dir):
     file_name_no_ext = '.'.join(img_name.split(".")[:-1])
 
     # 保存调整大小后的预测图像
-    imo.save(join(d_dir, file_name_no_ext + '.png'))
+    imo.save(join(d_dir, f'{file_name_no_ext}_{MODEL_NAME}-{model_code}.png'))
 
 if __name__ == '__main__':
-	# --------- 1. get image path and name ---------
-	
-	image_dir = join('.', 'FIVES-dataset', 'test', 'Original')
-	prediction_dir = join('.', 'test_results')
-	model_dir = join('.', 'saved_models', 'basnet_bsi', 'basnet_bsi_5.pth')
-	
-	img_name_list = glob.glob(join(image_dir, '*.png'))
-	
-	# --------- 2. dataloader ---------
-	#1. dataload
-	test_salobj_dataset = SalObjDataset(
-		img_name_list = img_name_list, 
+    # --------- 1. get image path and name ---------
+    
+    image_dir = join(dataset_path, f'Img_{MODE}')
+    prediction_dir = target_path
+    model_dir = join('.', 'saved_models', f'{MATCH_CASE}.pth')
+    
+    img_name_list = glob.glob(join(image_dir, f'*{IMG_EXT}'))
+
+    device = torch.device(f'cuda:{CUDA_NUM}' if torch.cuda.is_available() else "cpu")
+    
+    # --------- 2. dataloader ---------
+    #1. dataload
+    test_salobj_dataset = SalObjDataset(
+        img_name_list = img_name_list, 
         lbl_name_list = [], 
         transform=transforms.Compose([
             RescaleT(256),
             ToTensorLab(flag=0)
         ])
-	)
-	test_salobj_dataloader = DataLoader(
-		test_salobj_dataset, 
-		batch_size=1, 
-		shuffle=False, 
-		num_workers=1
-	)
-	
-	# --------- 3. model define ---------
-	print("...load BASNet...")
-	net = BASNet(3,1)
-	net.load_state_dict(torch.load(model_dir))
-	if torch.cuda.is_available():
-		net.cuda()
-	net.eval()
-	
-	# --------- 4. inference for each image ---------
-	for i_test, data_test in enumerate(test_salobj_dataloader):
-	
-		print("inferencing:", img_name_list[i_test].split(sep)[-1])
-	
-		inputs_test = data_test['image']
-		inputs_test = inputs_test.type(torch.FloatTensor)
-	
-		if torch.cuda.is_available():
-			inputs_test = Variable(inputs_test.cuda())
-		else:
-			inputs_test = Variable(inputs_test)
-	
-		d1, *_ = net(inputs_test)
-	
-		# normalization
-		pred = d1[:,0,:,:]
-		pred = normalize_prediction(pred)
-	
-		# save results to test_results folder
-		save_output(img_name_list[i_test], pred, prediction_dir)
+    )
+    test_salobj_dataloader = DataLoader(
+        test_salobj_dataset, 
+        batch_size=1, 
+        shuffle=False, 
+        num_workers=1
+    )
+    
+    # --------- 3. model define ---------
+    print("...load BASNet...")
+    net = BASNet(3,1)
+    net.to(device)
+    for model in glob.glob(model_dir):
+        print(f'Testing on {model}...')
+        net.load_state_dict(torch.load(model))
+        if torch.cuda.is_available():
+            net.cuda()
+        net.eval()
+        
+        # --------- 4. inference for each image ---------
+        for i_test, data_test in enumerate(test_salobj_dataloader):
+        
+            print("inferencing:", img_name_list[i_test].split(sep)[-1])
+        
+            inputs_test = data_test['image']
+            inputs_test = inputs_test.type(torch.FloatTensor)
+        
+            if torch.cuda.is_available():
+                inputs_test = Variable(inputs_test.cuda())
+            else:
+                inputs_test = Variable(inputs_test)
+        
+            d1, *_ = net(inputs_test)
+        
+            # normalization
+            pred = d1[:,0,:,:]
+            # pred = normalize_prediction(pred)
+        
+            # save results to test_results folder
+            save_output(img_name_list[i_test], pred, target_path, splitext(basename(model))[0])

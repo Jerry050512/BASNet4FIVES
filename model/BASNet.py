@@ -389,12 +389,12 @@ class BASNet(nn.Module):
         dout = self.refunet(d1) # 256
 
         return (
-            F.sigmoid(dout), 
-            F.sigmoid(d1), 
-            F.sigmoid(d2), 
-            F.sigmoid(d3), 
-            F.sigmoid(d4), 
-            F.sigmoid(d5), 
-            F.sigmoid(d6), 
-            F.sigmoid(db)
+            dout, 
+            d1, 
+            d2, 
+            d3, 
+            d4, 
+            d5, 
+            d6, 
+            db
         )
