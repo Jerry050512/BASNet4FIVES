@@ -2,6 +2,7 @@ import torch
 from torch.autograd import Variable
 from torch.utils.tensorboard import SummaryWriter
 import torch.nn as nn
+from torch.cuda.amp import autocast, GradScaler
 
 from torch.utils.data import DataLoader
 from torchvision import transforms
@@ -26,6 +27,8 @@ import pytorch_iou
 bce_loss = nn.BCELoss(reduction='mean')
 ssim_loss = pytorch_ssim.SSIM(window_size=11,reduction='mean')
 iou_loss = pytorch_iou.IOU(reduction='mean')
+
+scaler = GradScaler()
 
 def bce_ssim_loss(pred, target):
     """
@@ -93,7 +96,7 @@ train_label_dir = join('train', 'Labels')
 image_ext = '.png'
 label_ext = '.png'
 
-model_dir = join('.', 'saved_models', 'basnet_bsi/')
+model_dir = join('.', 'saved_models')
 
 
 epoch_num = 10000
@@ -141,12 +144,13 @@ salobj_dataloader = DataLoader(
     salobj_dataset, 
     batch_size=batch_size_train, 
     shuffle=True, 
-    num_workers=4
+    num_workers=1
 )
 
 # ------- 3. define model --------
 # define the net
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+# device = torch.device("cpu")
 net = BASNet(3, 1)
 net.to(device)
 
@@ -188,11 +192,14 @@ if __name__ == '__main__':
             optimizer.zero_grad()
 
             # forward + backward + optimize
-            d0, d1, d2, d3, d4, d5, d6, d7 = net(inputs)
-            loss2, loss = muti_bce_loss_fusion(d0, d1, d2, d3, d4, d5, d6, d7, labels)
+            with autocast():
+                d0, d1, d2, d3, d4, d5, d6, d7 = net(inputs)
+                loss2, loss = muti_bce_loss_fusion(d0, d1, d2, d3, d4, d5, d6, d7, labels)
 
-            loss.backward()
-            optimizer.step()
+            # 使用scaler缩放损失并反向传播
+            scaler.scale(loss).backward()
+            scaler.step(optimizer)
+            scaler.update()
 
             # del temporary outputs and loss
             # del d0, d1, d2, d3, d4, d5, d6, d7, loss2, loss
@@ -208,12 +215,12 @@ if __name__ == '__main__':
                 )
             )
 
-            if ite_num % 1000 == 0:  # save model every 2000 iterations
-                time = datetime.datetime.now().strftime('%Y%m%d-%H%M%S')
-                torch.save(
-                    net.state_dict(), 
-                    f"{model_dir}basnet_bsi_itr_{ite_num}_train_{loss.item():.3f}-{time}.pth"
-                )
+        # if ite_num % 1000 == 0:  # save model every 2000 iterations
+        # time = datetime.datetime.now().strftime('%Y%m%d-%H%M%S')
+        torch.save(
+            net.state_dict(), 
+            f"{model_dir}/{epoch}.pth"
+        )
         writer.add_scalar("Loss/train", loss, epoch)
 
     print('-------------Congratulations! Training Done!!!-------------')

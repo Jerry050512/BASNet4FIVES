@@ -21,8 +21,8 @@ class RefUnet(nn.Module):
         self.conv0 = nn.Conv2d(in_ch,inc_ch,3,padding=1)
 
         # 第一层卷积模块
-        self.conv1 = nn.Conv2d(inc_ch,64,3,padding=1)
-        self.bn1 = nn.BatchNorm2d(64)
+        self.conv1 = nn.Conv2d(inc_ch,32,3,padding=1)
+        self.bn1 = nn.BatchNorm2d(32)
         self.relu1 = nn.ReLU(inplace=True)
         self.pool1 = nn.MaxPool2d(2,2,ceil_mode=True)
 
@@ -138,6 +138,75 @@ class RefUnet(nn.Module):
 
         # 返回加权残差和输入图像的和
         return x + residual
+    
+class MultiHeadAttention(nn.Module):
+    def __init__(self, embed_dim, num_heads, dropout=0.1):
+        super(MultiHeadAttention, self).__init__()
+        self.embed_dim = embed_dim
+        self.num_heads = num_heads
+        self.dropout = nn.Dropout(dropout)
+        
+        assert embed_dim % num_heads == 0, "Embedding dimension must be divisible by number of heads."
+
+        self.projection_dim = embed_dim // num_heads
+        
+        # Define the parameter matrices for the query, key, and value transformations
+        self.query_proj = nn.Linear(embed_dim, embed_dim)
+        self.key_proj = nn.Linear(embed_dim, embed_dim)
+        self.value_proj = nn.Linear(embed_dim, embed_dim)
+        
+        # Final linear layer after concatenation of the heads
+        self.out_proj = nn.Linear(embed_dim, embed_dim)
+
+    def forward(self, query, key, value, mask=None):
+        batch_size = query.size(0)
+        
+        # 确保query、key、value的形状是 (batch_size, seq_len, embed_dim)
+        query = query.view(batch_size, -1, self.embed_dim)
+        key = key.view(batch_size, -1, self.embed_dim)
+        value = value.view(batch_size, -1, self.embed_dim)
+        
+        # 分割成多个头
+        query = self.query_proj(query).view(batch_size, -1, self.num_heads, self.projection_dim).transpose(1, 2)
+        key = self.key_proj(key).view(batch_size, -1, self.num_heads, self.projection_dim).transpose(1, 2)
+        value = self.value_proj(value).view(batch_size, -1, self.num_heads, self.projection_dim).transpose(1, 2)
+        
+        # Attention mechanism
+        scores = torch.matmul(query, key.transpose(-2, -1)) / math.sqrt(self.projection_dim)
+        if mask is not None:
+            scores = scores.masked_fill(mask == 0, -1e9)
+        
+        attention_weights = F.softmax(scores, dim=-1)
+        attention_weights = self.dropout(attention_weights)
+        
+        # Weighted sum of values based on the attention weights
+        context = torch.matmul(attention_weights, value)
+        
+        # Concatenate the heads and put through final linear layer
+        context = context.transpose(1, 2).contiguous().view(batch_size, -1, self.embed_dim)
+        output = self.out_proj(context)
+        
+        return output, attention_weights
+
+class TransformerEncoderLayer(nn.Module):
+    def __init__(self, d_model, n_heads):
+        super(TransformerEncoderLayer, self).__init__()
+        self.self_attn = MultiHeadAttention(d_model, n_heads)
+        self.norm1 = nn.LayerNorm(d_model)
+        self.norm2 = nn.LayerNorm(d_model)
+        self.feed_forward = nn.Sequential(
+            nn.Linear(d_model, d_model * 2),
+            nn.ReLU(),
+            nn.Linear(d_model * 2, d_model)
+        )
+        
+    def forward(self, src, src_mask=None):
+        src2 = self.self_attn(src, src, src, src_mask)[0]
+        src = src + self.norm1(src2)
+        src2 = self.feed_forward(src)
+        src = src + self.norm2(src2)
+        return src
+
 
 class BASNet(nn.Module):
     """
@@ -166,6 +235,9 @@ class BASNet(nn.Module):
         self.encoder2 = resnet.layer2 # 112
         self.encoder3 = resnet.layer3 # 56
         self.encoder4 = resnet.layer4 # 28
+        
+        # Transformer编码器层
+        self.transformer_encoder = TransformerEncoderLayer(512, 4)
 
         # 最大池化层
         self.pool4 = nn.MaxPool2d(2, 2, ceil_mode=True)
@@ -306,6 +378,8 @@ class BASNet(nn.Module):
         hx = self.inbn(hx)
         hx = self.inrelu(hx)
 
+        
+        hx = self.transformer_encoder(hx)
         h1 = self.encoder1(hx) # 256
         h2 = self.encoder2(h1) # 128
         h3 = self.encoder3(h2) # 64
