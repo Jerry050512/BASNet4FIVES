@@ -4,6 +4,7 @@ from torchvision import models
 import torch.nn.functional as F
 
 from .resnet_model import *
+from .pvt import pvt_small
 
 
 class RefUnet(nn.Module):
@@ -151,21 +152,26 @@ class BASNet(nn.Module):
     def __init__(self, n_channels, n_classes):
         super(BASNet,self).__init__()
 
-        # 使用预训练的ResNet34作为编码器的基础
-        resnet = models.resnet34(weights=models.ResNet34_Weights.DEFAULT)
-
         ## -------------Encoder--------------
+
+        # 1. 替换ResNet34为PVT-Small
+        self.pvt = pvt_small()  # 替换原来的ResNet34
+        
+        # 2. 添加额外的转换层来调整通道数
+        self.trans1 = nn.Conv2d(64, 64, 1)    # Stage1输出
+        self.trans2 = nn.Conv2d(128, 128, 1)  # Stage2输出  
+        self.trans3 = nn.Conv2d(320, 256, 1)  # Stage3输出
+        self.trans4 = nn.Conv2d(512, 512, 1)  # Stage4输出
+        
+        # 3. 移除原有的encoder1-4和resb5层
+        # 删除self.encoder1-4相关代码
+        
+        # 4. 保留原有的bridge和decoder部分
 
         # 输入卷积层
         self.inconv = nn.Conv2d(n_channels, 64, 3, padding=1)
         self.inbn = nn.BatchNorm2d(64)
         self.inrelu = nn.ReLU(inplace=True)
-
-        # ResNet的前四层（stage 1-4）
-        self.encoder1 = resnet.layer1 # 224
-        self.encoder2 = resnet.layer2 # 112
-        self.encoder3 = resnet.layer3 # 56
-        self.encoder4 = resnet.layer4 # 28
 
         # 最大池化层
         self.pool4 = nn.MaxPool2d(2, 2, ceil_mode=True)
@@ -302,14 +308,25 @@ class BASNet(nn.Module):
         hx = x
 
         ## -------------Encoder-------------
-        hx = self.inconv(hx)
-        hx = self.inbn(hx)
-        hx = self.inrelu(hx)
+        # 获取PVT的多尺度特征
+        pvt_features = self.pvt(x)
+        
+        # 转换特征通道数以匹配原架构
+        h1 = self.trans1(pvt_features[0])  # 64->64
+        h2 = self.trans2(pvt_features[1])  # 128->128
+        h3 = self.trans3(pvt_features[2])  # 320->256
+        h4 = self.trans4(pvt_features[3])  # 512->512
 
-        h1 = self.encoder1(hx) # 256
-        h2 = self.encoder2(h1) # 128
-        h3 = self.encoder3(h2) # 64
-        h4 = self.encoder4(h3) # 32
+        # 3. 确保特征图大小匹配
+        # 计算目标大小
+        H, W = x.size(2), x.size(3)
+        target_sizes = [(256, 256), (128, 128), (64, 64), (32, 32)]
+        
+        # 调整特征图大小
+        h1 = F.interpolate(h1, size=target_sizes[0], mode='bilinear', align_corners=True)
+        h2 = F.interpolate(h2, size=target_sizes[1], mode='bilinear', align_corners=True)
+        h3 = F.interpolate(h3, size=target_sizes[2], mode='bilinear', align_corners=True)
+        h4 = F.interpolate(h4, size=target_sizes[3], mode='bilinear', align_corners=True)
 
         hx = self.pool4(h4) # 16
 
@@ -398,3 +415,18 @@ class BASNet(nn.Module):
             d6, 
             db
         )
+
+if __name__ == '__main__':
+    # Load the PVT model
+    model = BASNet(3, 1)
+
+    # # Optionally load pre-trained weights
+    # pretrained_weights_path = 'path/to/pretrained.pth'
+    # model.init_weights(pretrained_weights_path)
+
+    # Input tensor (assuming batch size 1)
+    input_tensor = torch.randn(1, 3, 224, 224)
+
+    # Forward pass
+    output = model(input_tensor)
+    print([o.shape for o in output])

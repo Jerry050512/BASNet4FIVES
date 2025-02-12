@@ -10,6 +10,7 @@ import torch.optim as optim
 import glob
 import datetime
 from os.path import join, sep, exists, basename
+import torch.nn.functional as F
 
 from data_loader import RescaleT
 from data_loader import RandomCrop
@@ -22,11 +23,11 @@ import pytorch_ssim
 import pytorch_iou
 
 DATASET = 'SSP2000'
-MODEL_NAME = 'BASNet'
+MODEL_NAME = 'BASNet-PVT'
 EPOCH_SCALE = 1
 MODEL_CODE = f'ssp'
 MODE = 'train'
-CUDA_NUM = 0
+CUDA_NUM = 3
 IMG_EXT = '.jpg'
 
 dataset_path = f'/home/zhengang/dataset/{DATASET}'
@@ -199,6 +200,7 @@ if __name__ == '__main__':
 
             # forward + backward + optimize
             d0, d1, d2, d3, d4, d5, d6, d7 = net(inputs)
+            labels = F.interpolate(labels, size=(256, 256), mode='bilinear', align_corners=True)
             loss2, loss = muti_bce_loss_fusion(d0, d1, d2, d3, d4, d5, d6, d7, labels)
 
             loss.backward()

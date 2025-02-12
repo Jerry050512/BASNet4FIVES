@@ -24,11 +24,11 @@ from data_loader import SalObjDataset
 from model import BASNet
 
 DATASET = 'SSP2000'
-MODEL_NAME = 'BASNet'
+MODEL_NAME = 'BASNet-PVT'
 EPOCH_SCALE = 1
 MODEL_CODE = f'ssp'
 MODE = 'test'
-CUDA_NUM = 1
+CUDA_NUM = 3
 IMG_EXT = '.jpg'
 MATCH_CASE = f'{MODEL_CODE}-*'
 
