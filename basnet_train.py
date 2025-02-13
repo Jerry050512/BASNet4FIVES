@@ -63,7 +63,7 @@ def bce_ssim_loss(pred, target):
     return loss
 
 # TO-DO 重构参数顺序，更加优雅得处理多参数。
-def muti_bce_loss_fusion(d0, d1, d2, d3, d4, d5, d6, d7, labels_v):
+def muti_bce_loss_fusion(d0, d1, d2, d3, d4, d5, labels_v):
     """
     对多个预测结果进行二分类交叉熵损失（BCE）融合的函数。
     
@@ -83,14 +83,13 @@ def muti_bce_loss_fusion(d0, d1, d2, d3, d4, d5, d6, d7, labels_v):
     loss3 = bce_ssim_loss(d3, labels_v)
     loss4 = bce_ssim_loss(d4, labels_v)
     loss5 = bce_ssim_loss(d5, labels_v)
-    loss6 = bce_ssim_loss(d6, labels_v)
-    loss7 = bce_ssim_loss(d7, labels_v)
     
     # 打印各个损失的值
-    print("l0: %3f, l1: %3f, l2: %3f, l3: %3f, l4: %3f, l5: %3f, l6: %3f\n"%(loss0.item(),loss1.item(),loss2.item(),loss3.item(),loss4.item(),loss5.item(),loss6.item()))
+    # print("l0: %3f, l1: %3f, l2: %3f, l3: %3f, l4: %3f, l5: %3f\n"%(loss0.item(),loss1.item(),loss2.item(),loss3.item(),loss4.item(),loss5.item()))
 
     # 计算所有预测结果的BCE损失之和
-    loss = loss0 + loss1 + loss2 + loss3 + loss4 + loss5 + loss6 + loss7
+    loss = loss0 + loss1 + loss2 + loss3 + loss4 + loss5
+    print(f"Loss: {loss.item():.3f}\n")
     
     return loss0, loss
 
@@ -107,7 +106,7 @@ label_ext = '.png'
 model_dir = join('.', 'saved_models/')
 
 
-epoch_num = 320         # According to the paper, 400k iter * batch size 8 / DUTS dataset size 10000
+epoch_num = 2000         # According to the paper, 400k iter * batch size 8 / DUTS dataset size 10000
 batch_size_train = 8
 train_num = 0 
 
@@ -199,9 +198,8 @@ if __name__ == '__main__':
             optimizer.zero_grad()
 
             # forward + backward + optimize
-            d0, d1, d2, d3, d4, d5, d6, d7 = net(inputs)
-            labels = F.interpolate(labels, size=(256, 256), mode='bilinear', align_corners=True)
-            loss2, loss = muti_bce_loss_fusion(d0, d1, d2, d3, d4, d5, d6, d7, labels)
+            d0, d1, d2, d3, d4, d5 = net(inputs)
+            loss2, loss = muti_bce_loss_fusion(d0, d1, d2, d3, d4, d5, labels)
 
             loss.backward()
             optimizer.step()
@@ -221,12 +219,13 @@ if __name__ == '__main__':
             )
 
         # if ite_num % 1000 == 0:  # save model every 2000 iterations
-        time = datetime.datetime.now().strftime('%Y%m%d-%H%M%S')
-        print(f'{time} - Saving model...')
-        torch.save(
-            net.state_dict(), 
-            f"{model_dir}{MODEL_CODE}-{epoch+1}.pth"
-        )
-        writer.add_scalar("Loss/train", loss, epoch)
+        if (epoch + 1) % 10 == 0:
+            time = datetime.datetime.now().strftime('%Y%m%d-%H%M%S')
+            print(f'{time} - Saving model...')
+            torch.save(
+                net.state_dict(), 
+                f"{model_dir}{MODEL_CODE}-{epoch+1}.pth"
+            )
+            writer.add_scalar("Loss/train", loss, epoch)
 
     print('-------------Congratulations! Training Done!!!-------------')

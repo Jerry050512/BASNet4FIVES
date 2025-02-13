@@ -3,7 +3,7 @@ import torch.nn as nn
 from torchvision import models
 import torch.nn.functional as F
 
-from .resnet_model import *
+# from .resnet_model import *
 from .pvt import pvt_small
 
 
@@ -154,45 +154,18 @@ class BASNet(nn.Module):
 
         ## -------------Encoder--------------
 
-        # 1. 替换ResNet34为PVT-Small
-        self.pvt = pvt_small()  # 替换原来的ResNet34
-        
-        # 2. 添加额外的转换层来调整通道数
-        self.trans1 = nn.Conv2d(64, 64, 1)    # Stage1输出
-        self.trans2 = nn.Conv2d(128, 128, 1)  # Stage2输出  
-        self.trans3 = nn.Conv2d(320, 256, 1)  # Stage3输出
-        self.trans4 = nn.Conv2d(512, 512, 1)  # Stage4输出
-        
-        # 3. 移除原有的encoder1-4和resb5层
-        # 删除self.encoder1-4相关代码
-        
-        # 4. 保留原有的bridge和decoder部分
-
         # 输入卷积层
         self.inconv = nn.Conv2d(n_channels, 64, 3, padding=1)
         self.inbn = nn.BatchNorm2d(64)
         self.inrelu = nn.ReLU(inplace=True)
 
-        # 最大池化层
-        self.pool4 = nn.MaxPool2d(2, 2, ceil_mode=True)
-
-        # 自定义的第五层（stage 5）
-        self.resb5_1 = BasicBlock(512, 512)
-        self.resb5_2 = BasicBlock(512, 512)
-        self.resb5_3 = BasicBlock(512, 512) # 14
-
-        # 最大池化层
-        self.pool5 = nn.MaxPool2d(2, 2, ceil_mode=True)
-
-        # 自定义的第六层（stage 6）
-        self.resb6_1 = BasicBlock(512, 512)
-        self.resb6_2 = BasicBlock(512, 512)
-        self.resb6_3 = BasicBlock(512, 512) # 7
+        # 1. 替换ResNet34为PVT-Small
+        self.pvt = pvt_small()  # 替换原来的ResNet34
 
         ## -------------Bridge--------------
 
         # Bridge阶段的卷积层
-        self.convbg_1 = nn.Conv2d(512, 512, 3, dilation=2, padding=2) # 7
+        self.convbg_1 = nn.Conv2d(512, 512, 3, dilation=2, padding=2)
         self.bnbg_1 = nn.BatchNorm2d(512)
         self.relubg_1 = nn.ReLU(inplace=True)
         self.convbg_m = nn.Conv2d(512, 512, 3, dilation=2, padding=2)
@@ -204,32 +177,6 @@ class BASNet(nn.Module):
 
         ## -------------Decoder--------------
 
-        # stage 6d 解码层
-        self.conv6d_1 = nn.Conv2d(1024, 512, 3, padding=1) # 16
-        self.bn6d_1 = nn.BatchNorm2d(512)
-        self.relu6d_1 = nn.ReLU(inplace=True)
-
-        self.conv6d_m = nn.Conv2d(512, 512, 3, dilation=2, padding=2)
-        self.bn6d_m = nn.BatchNorm2d(512)
-        self.relu6d_m = nn.ReLU(inplace=True)
-
-        self.conv6d_2 = nn.Conv2d(512, 512, 3, dilation=2, padding=2)
-        self.bn6d_2 = nn.BatchNorm2d(512)
-        self.relu6d_2 = nn.ReLU(inplace=True)
-
-        # stage 5d 解码层
-        self.conv5d_1 = nn.Conv2d(1024, 512, 3,padding=1) # 16
-        self.bn5d_1 = nn.BatchNorm2d(512)
-        self.relu5d_1 = nn.ReLU(inplace=True)
-
-        self.conv5d_m = nn.Conv2d(512, 512, 3,padding=1)
-        self.bn5d_m = nn.BatchNorm2d(512)
-        self.relu5d_m = nn.ReLU(inplace=True)
-
-        self.conv5d_2 = nn.Conv2d(512, 512, 3,padding=1)
-        self.bn5d_2 = nn.BatchNorm2d(512)
-        self.relu5d_2 = nn.ReLU(inplace=True)
-
         # stage 4d 解码层
         self.conv4d_1 = nn.Conv2d(1024, 512, 3,padding=1) # 32
         self.bn4d_1 = nn.BatchNorm2d(512)
@@ -239,20 +186,20 @@ class BASNet(nn.Module):
         self.bn4d_m = nn.BatchNorm2d(512)
         self.relu4d_m = nn.ReLU(inplace=True)
 
-        self.conv4d_2 = nn.Conv2d(512, 256, 3, padding=1)
-        self.bn4d_2 = nn.BatchNorm2d(256)
+        self.conv4d_2 = nn.Conv2d(512, 320, 3, padding=1)
+        self.bn4d_2 = nn.BatchNorm2d(320)
         self.relu4d_2 = nn.ReLU(inplace=True)
 
         # stage 3d 解码层
-        self.conv3d_1 = nn.Conv2d(512, 256, 3, padding=1) # 64
-        self.bn3d_1 = nn.BatchNorm2d(256)
+        self.conv3d_1 = nn.Conv2d(640, 320, 3, padding=1) # 64
+        self.bn3d_1 = nn.BatchNorm2d(320)
         self.relu3d_1 = nn.ReLU(inplace=True)
 
-        self.conv3d_m = nn.Conv2d(256, 256, 3, padding=1)
-        self.bn3d_m = nn.BatchNorm2d(256)
+        self.conv3d_m = nn.Conv2d(320, 320, 3, padding=1)
+        self.bn3d_m = nn.BatchNorm2d(320)
         self.relu3d_m = nn.ReLU(inplace=True)
 
-        self.conv3d_2 = nn.Conv2d(256, 128, 3, padding=1)
+        self.conv3d_2 = nn.Conv2d(320, 128, 3, padding=1)
         self.bn3d_2 = nn.BatchNorm2d(128)
         self.relu3d_2 = nn.ReLU(inplace=True)
 
@@ -284,17 +231,12 @@ class BASNet(nn.Module):
 
         ## -------------Bilinear Upsampling--------------
         # 双线性插值上采样层
-        self.upscore6 = nn.Upsample(scale_factor=32, mode='bilinear')###
-        self.upscore5 = nn.Upsample(scale_factor=16, mode='bilinear')
-        self.upscore4 = nn.Upsample(scale_factor=8, mode='bilinear')
-        self.upscore3 = nn.Upsample(scale_factor=4, mode='bilinear')
+        self.upscore = nn.Upsample(size=(224, 224), mode='bilinear')
         self.upscore2 = nn.Upsample(scale_factor=2, mode='bilinear')
 
         ## -------------Side Output--------------
         self.outconvb = nn.Conv2d(512, 1, 3, padding=1)
-        self.outconv6 = nn.Conv2d(512, 1, 3, padding=1)
-        self.outconv5 = nn.Conv2d(512, 1, 3, padding=1)
-        self.outconv4 = nn.Conv2d(256, 1, 3, padding=1)
+        self.outconv4 = nn.Conv2d(320, 1, 3, padding=1)
         self.outconv3 = nn.Conv2d(128, 1, 3, padding=1)
         self.outconv2 = nn.Conv2d(64, 1, 3, padding=1)
         self.outconv1 = nn.Conv2d(64, 1, 3, padding=1)
@@ -306,104 +248,66 @@ class BASNet(nn.Module):
     def forward(self,x):
 
         hx = x
+        hx = self.inrelu(self.inbn(self.inconv(x)))
 
         ## -------------Encoder-------------
         # 获取PVT的多尺度特征
         pvt_features = self.pvt(x)
+        # [torch.Size([1, 64, 56, 56]), torch.Size([1, 128, 28, 28]), torch.Size([1, 320, 14, 14]), torch.Size([1, 512, 7, 7])]
         
         # 转换特征通道数以匹配原架构
-        h1 = self.trans1(pvt_features[0])  # 64->64
-        h2 = self.trans2(pvt_features[1])  # 128->128
-        h3 = self.trans3(pvt_features[2])  # 320->256
-        h4 = self.trans4(pvt_features[3])  # 512->512
-
-        # 3. 确保特征图大小匹配
-        # 计算目标大小
-        H, W = x.size(2), x.size(3)
-        target_sizes = [(256, 256), (128, 128), (64, 64), (32, 32)]
-        
-        # 调整特征图大小
-        h1 = F.interpolate(h1, size=target_sizes[0], mode='bilinear', align_corners=True)
-        h2 = F.interpolate(h2, size=target_sizes[1], mode='bilinear', align_corners=True)
-        h3 = F.interpolate(h3, size=target_sizes[2], mode='bilinear', align_corners=True)
-        h4 = F.interpolate(h4, size=target_sizes[3], mode='bilinear', align_corners=True)
-
-        hx = self.pool4(h4) # 16
-
-        hx = self.resb5_1(hx)
-        hx = self.resb5_2(hx)
-        h5 = self.resb5_3(hx)
-
-        hx = self.pool5(h5) # 8
-
-        hx = self.resb6_1(hx)
-        hx = self.resb6_2(hx)
-        h6 = self.resb6_3(hx)
+        h1 = pvt_features[0]  # 64x56x56
+        h2 = pvt_features[1]  # 128x28x28
+        h3 = pvt_features[2]  # 320x14x14
+        h4 = pvt_features[3]  # 512x7x7
 
         ## -------------Bridge-------------
-        hx = self.relubg_1(self.bnbg_1(self.convbg_1(h6))) # 8
+        hx = self.relubg_1(self.bnbg_1(self.convbg_1(h4))) # 512x7x7
         hx = self.relubg_m(self.bnbg_m(self.convbg_m(hx)))
         hbg = self.relubg_2(self.bnbg_2(self.convbg_2(hx)))
 
         ## -------------Decoder-------------
 
-        hx = self.relu6d_1(self.bn6d_1(self.conv6d_1(torch.cat((hbg,h6),1))))
-        hx = self.relu6d_m(self.bn6d_m(self.conv6d_m(hx)))
-        hd6 = self.relu6d_2(self.bn6d_2(self.conv6d_2(hx)))
-
-        hx = self.upscore2(hd6) # 8 -> 16
-
-        hx = self.relu5d_1(self.bn5d_1(self.conv5d_1(torch.cat((hx,h5),1))))
-        hx = self.relu5d_m(self.bn5d_m(self.conv5d_m(hx)))
-        hd5 = self.relu5d_2(self.bn5d_2(self.conv5d_2(hx)))
-
-        hx = self.upscore2(hd5) # 16 -> 32
-
-        hx = self.relu4d_1(self.bn4d_1(self.conv4d_1(torch.cat((hx,h4),1))))
+        hx = self.relu4d_1(self.bn4d_1(self.conv4d_1(torch.cat((hbg,h4),1))))
         hx = self.relu4d_m(self.bn4d_m(self.conv4d_m(hx)))
-        hd4 = self.relu4d_2(self.bn4d_2(self.conv4d_2(hx)))
+        hd4 = self.relu4d_2(self.bn4d_2(self.conv4d_2(hx))) # 320x7x7
 
-        hx = self.upscore2(hd4) # 32 -> 64
+        hx = self.upscore2(hd4) # 7 -> 14
 
         hx = self.relu3d_1(self.bn3d_1(self.conv3d_1(torch.cat((hx,h3),1))))
         hx = self.relu3d_m(self.bn3d_m(self.conv3d_m(hx)))
-        hd3 = self.relu3d_2(self.bn3d_2(self.conv3d_2(hx)))
+        hd3 = self.relu3d_2(self.bn3d_2(self.conv3d_2(hx))) # 128x14x14
 
-        hx = self.upscore2(hd3) # 64 -> 128
+        hx = self.upscore2(hd3) # 14 -> 28
 
         hx = self.relu2d_1(self.bn2d_1(self.conv2d_1(torch.cat((hx,h2),1))))
         hx = self.relu2d_m(self.bn2d_m(self.conv2d_m(hx)))
-        hd2 = self.relu2d_2(self.bn2d_2(self.conv2d_2(hx)))
+        hd2 = self.relu2d_2(self.bn2d_2(self.conv2d_2(hx))) # 64x28x28
 
-        hx = self.upscore2(hd2) # 128 -> 256
+        hx = self.upscore2(hd2) # 28 -> 56
 
         hx = self.relu1d_1(self.bn1d_1(self.conv1d_1(torch.cat((hx,h1),1))))
         hx = self.relu1d_m(self.bn1d_m(self.conv1d_m(hx)))
-        hd1 = self.relu1d_2(self.bn1d_2(self.conv1d_2(hx)))
+        hd1 = self.relu1d_2(self.bn1d_2(self.conv1d_2(hx))) # 64x56x56
 
         ## -------------Side Output-------------
         db = self.outconvb(hbg)
-        db = self.upscore6(db) # 8->256
-
-        d6 = self.outconv6(hd6)
-        d6 = self.upscore6(d6) # 8->256
-
-        d5 = self.outconv5(hd5)
-        d5 = self.upscore5(d5) # 16->256
+        db = self.upscore(db) # 7
 
         d4 = self.outconv4(hd4)
-        d4 = self.upscore4(d4) # 32->256
+        d4 = self.upscore(d4) # 7
 
         d3 = self.outconv3(hd3)
-        d3 = self.upscore3(d3) # 64->256
+        d3 = self.upscore(d3) # 14
 
         d2 = self.outconv2(hd2)
-        d2 = self.upscore2(d2) # 128->256
+        d2 = self.upscore(d2) # 28
 
-        d1 = self.outconv1(hd1) # 256
+        d1 = self.outconv1(hd1) # 56
+        d1 = self.upscore(d1)
 
         ## -------------Refine Module-------------
-        dout = self.refunet(d1) # 256
+        dout = self.refunet(d1)
 
         return (
             dout, 
@@ -411,8 +315,6 @@ class BASNet(nn.Module):
             d2, 
             d3, 
             d4, 
-            d5, 
-            d6, 
             db
         )
 

@@ -30,7 +30,7 @@ MODEL_CODE = f'ssp'
 MODE = 'test'
 CUDA_NUM = 3
 IMG_EXT = '.jpg'
-MATCH_CASE = f'{MODEL_CODE}-*'
+MATCH_CASE = f'{MODEL_CODE}-45'
 
 dataset_path = f'/home/zhengang/dataset/{DATASET}'
 target_path = f'/home/zhengang/dataset/prediction/{MODEL_NAME}/{DATASET}/{MODE}'
