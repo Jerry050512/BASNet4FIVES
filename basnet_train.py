@@ -9,7 +9,8 @@ import torch.optim as optim
 
 import glob
 import datetime
-from os.path import join, sep, exists, basename
+import os
+from os.path import join, sep, exists, basename, splitext
 import torch.nn.functional as F
 
 from data_loader import RescaleT
@@ -22,15 +23,19 @@ from model import BASNet
 import pytorch_ssim
 import pytorch_iou
 
-DATASET = 'SSP2000'
+from basnet_test import save_output
+from pyeval.main import evaluate_mae_smeasure, clear_pred
+from pprint import pprint
+
+DATASET = 'PanNuke'
 MODEL_NAME = 'BASNet-PVT'
 EPOCH_SCALE = 1
-MODEL_CODE = f'ssp'
+MODEL_CODE = f'p'
 MODE = 'train'
-CUDA_NUM = 3
+CUDA_NUM = 1
 IMG_EXT = '.jpg'
 
-dataset_path = f'/home/zhengang/dataset/{DATASET}'
+dataset_path = f'/home/shenkunye/GangZheng/dataset/{DATASET}'
 
 # ------- 1. define loss function --------
 
@@ -54,11 +59,11 @@ def bce_ssim_loss(pred, target):
     bce_out = bce_loss(pred, target)
     # 计算结构相似度指数损失
     ssim_out = 1 - ssim_loss(pred, target)
-    # 计算IoU损失
-    iou_out = iou_loss(pred, target)
+    # # 计算IoU损失
+    # iou_out = iou_loss(pred, target)
 
     # 综合三种损失，得到最终的损失值
-    loss = bce_out + ssim_out + iou_out
+    loss = bce_out + ssim_out # + iou_out
 
     return loss
 
@@ -85,7 +90,7 @@ def muti_bce_loss_fusion(d0, d1, d2, d3, d4, d5, labels_v):
     loss5 = bce_ssim_loss(d5, labels_v)
     
     # 打印各个损失的值
-    # print("l0: %3f, l1: %3f, l2: %3f, l3: %3f, l4: %3f, l5: %3f\n"%(loss0.item(),loss1.item(),loss2.item(),loss3.item(),loss4.item(),loss5.item()))
+    print("l0: %3f, l1: %3f, l2: %3f, l3: %3f, l4: %3f, l5: %3f\n"%(loss0.item(),loss1.item(),loss2.item(),loss3.item(),loss4.item(),loss5.item()))
 
     # 计算所有预测结果的BCE损失之和
     loss = loss0 + loss1 + loss2 + loss3 + loss4 + loss5
@@ -106,7 +111,7 @@ label_ext = '.png'
 model_dir = join('.', 'saved_models/')
 
 
-epoch_num = 2000         # According to the paper, 400k iter * batch size 8 / DUTS dataset size 10000
+epoch_num = 320         # According to the paper, 400k iter * batch size 8 / DUTS dataset size 10000
 batch_size_train = 8
 train_num = 0 
 
@@ -154,6 +159,37 @@ salobj_dataloader = DataLoader(
     num_workers=4
 )
 
+# --------- 1. get image path and name ---------
+
+target_path = f'/home/shenkunye/GangZheng/dataset/prediction/{MODEL_NAME}/{DATASET}/test'
+os.makedirs(target_path, exist_ok=True)
+
+os.system(f'cp {dataset_path}/GT_test/*.png {target_path}')
+    
+image_dir = join(dataset_path, f'Img_test')
+prediction_dir = target_path
+
+img_name_list = glob.glob(join(image_dir, f'*{IMG_EXT}'))
+
+device = torch.device(f'cuda:{CUDA_NUM}' if torch.cuda.is_available() else "cpu")
+
+# --------- 2. dataloader ---------
+#1. dataload
+test_salobj_dataset = SalObjDataset(
+    img_name_list = img_name_list, 
+    lbl_name_list = [], 
+    transform=transforms.Compose([
+        RescaleT(256),
+        ToTensorLab(flag=0)
+    ])
+)
+test_salobj_dataloader = DataLoader(
+    test_salobj_dataset, 
+    batch_size=1, 
+    shuffle=False, 
+    num_workers=1
+)
+
 # ------- 3. define model --------
 # define the net
 device = torch.device(f"cuda:{CUDA_NUM}" if torch.cuda.is_available() else "cpu")
@@ -185,6 +221,8 @@ if __name__ == '__main__':
     # net.load_state_dict(torch.load(join('.', 'saved_models', 'basnet_bsi', 'basnet_bsi_5.pth')))
     writer = SummaryWriter(join('.', 'runs', datetime.datetime.now().strftime('%Y%m%d-%H%M%S')))
     ite_num = 0
+    best_score = 0
+    best = None
 
     for epoch in range(epoch_num):
         net.train()
@@ -193,6 +231,7 @@ if __name__ == '__main__':
             ite_num += 1
 
             inputs, labels = data['image'].to(device, dtype=torch.float), data['label'].to(device, dtype=torch.float)
+
 
             # y zero the parameter gradients
             optimizer.zero_grad()
@@ -219,7 +258,8 @@ if __name__ == '__main__':
             )
 
         # if ite_num % 1000 == 0:  # save model every 2000 iterations
-        if (epoch + 1) % 10 == 0:
+        if (epoch + 1) % 1 == 0:
+            model = f"{MODEL_CODE}-{epoch+1}.pth"
             time = datetime.datetime.now().strftime('%Y%m%d-%H%M%S')
             print(f'{time} - Saving model...')
             torch.save(
@@ -227,5 +267,39 @@ if __name__ == '__main__':
                 f"{model_dir}{MODEL_CODE}-{epoch+1}.pth"
             )
             writer.add_scalar("Loss/train", loss, epoch)
+
+            print(f'Testing on {model}...')
+            # net.load_state_dict(torch.load(model))
+            net.eval()
+            
+            # --------- 4. inference for each image ---------
+            clear_pred(MODEL_NAME, DATASET, f"{MODEL_NAME}-{MODEL_CODE}-{epoch+1}")
+            print("Inferencing images...")
+            for i_test, data_test in enumerate(test_salobj_dataloader):
+            
+                # print("inferencing:", img_name_list[i_test].split(sep)[-1])
+            
+                inputs_test = data_test['image']
+                inputs_test = inputs_test.type(torch.FloatTensor)
+            
+                inputs_test = Variable(inputs_test.to(device))
+            
+                d1, *_ = net(inputs_test)
+            
+                # normalization
+                pred = d1[:,0,:,:]
+                # pred = normalize_prediction(pred)
+            
+                # save results to test_results folder
+                save_output(img_name_list[i_test], pred, target_path, splitext(basename(model))[0])
+
+            print("Eval MAE SMeasure...")
+            res = evaluate_mae_smeasure(MODEL_NAME, DATASET, f"{MODEL_NAME}-{MODEL_CODE}-{epoch+1}")
+            if res is not None:
+                if res.get("score", 0) > best_score:
+                    best = res
+                writer.add_scalar("score", res.get("score", 0), epoch)
+    print("Best Result: ")
+    pprint(best)
 
     print('-------------Congratulations! Training Done!!!-------------')

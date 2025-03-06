@@ -255,7 +255,7 @@ class pvt_large(PyramidVisionTransformer):
 
 if __name__ == '__main__':
     # Load the PVT model
-    model = pvt_small()
+    model = pvt_medium()
 
     # # Optionally load pre-trained weights
     # pretrained_weights_path = 'path/to/pretrained.pth'
@@ -267,3 +267,49 @@ if __name__ == '__main__':
     # Forward pass
     output = model(input_tensor)
     print([o.shape for o in output])
+
+    print("\nDetailed Model Structure Inspection:")
+
+    # --- Stage 1 ---
+    print("\n--- Stage 1 ---")
+    print(f"Patch Embed 1: {model.patch_embed1}") # Check patch size, embed_dim
+    print(f"Pos Embed 1 shape: {model.pos_embed1.shape}") # Check pos embed shape
+    print(f"Block 1 Layers: {len(model.block1)}") # Check number of blocks
+    if len(model.block1) > 0:
+        sample_block_1 = model.block1[0]
+        print(f"Block 1 - Sample Block - Norm1 dim: {sample_block_1.norm1.normalized_shape}") # Check Norm dim
+        print(f"Block 1 - Sample Block - Attention heads: {sample_block_1.attn.num_heads}") # Check Attention heads
+        print(f"Block 1 - Sample Block - MLP hidden dim (ratio): {sample_block_1.mlp.fc1.out_features / sample_block_1.mlp.fc1.in_features}") # Check MLP ratio
+
+    # --- Stage 2 ---
+    print("\n--- Stage 2 ---")
+    print(f"Patch Embed 2: {model.patch_embed2}") # Check patch size, embed_dim, in_chans
+    print(f"Pos Embed 2 shape: {model.pos_embed2.shape}")
+    print(f"Block 2 Layers: {len(model.block2)}")
+    if len(model.block2) > 0:
+        sample_block_2 = model.block2[0]
+        print(f"Block 2 - Sample Block - Norm1 dim: {sample_block_2.norm1.normalized_shape}")
+        print(f"Block 2 - Sample Block - Attention heads: {sample_block_2.attn.num_heads}")
+        print(f"Block 2 - Sample Block - MLP hidden dim (ratio): {sample_block_2.mlp.fc1.out_features / sample_block_2.mlp.fc1.in_features}")
+
+    # --- Stage 3 ---
+    print("\n--- Stage 3 ---")
+    print(f"Patch Embed 3: {model.patch_embed3}")
+    print(f"Pos Embed 3 shape: {model.pos_embed3.shape}")
+    print(f"Block 3 Layers: {len(model.block3)}")
+    if len(model.block3) > 0:
+        sample_block_3 = model.block3[0]
+        print(f"Block 3 - Sample Block - Norm1 dim: {sample_block_3.norm1.normalized_shape}")
+        print(f"Block 3 - Sample Block - Attention heads: {sample_block_3.attn.num_heads}")
+        print(f"Block 3 - Sample Block - MLP hidden dim (ratio): {sample_block_3.mlp.fc1.out_features / sample_block_3.mlp.fc1.in_features}")
+
+    # --- Stage 4 ---
+    print("\n--- Stage 4 ---")
+    print(f"Patch Embed 4: {model.patch_embed4}")
+    print(f"Pos Embed 4 shape: {model.pos_embed4.shape}")
+    print(f"Block 4 Layers: {len(model.block4)}")
+    if len(model.block4) > 0:
+        sample_block_4 = model.block4[0]
+        print(f"Block 4 - Sample Block - Norm1 dim: {sample_block_4.norm1.normalized_shape}")
+        print(f"Block 4 - Sample Block - Attention heads: {sample_block_4.attn.num_heads}")
+        print(f"Block 4 - Sample Block - MLP hidden dim (ratio): {sample_block_4.mlp.fc1.out_features / sample_block_4.mlp.fc1.in_features}")

@@ -1,9 +1,13 @@
 __pycache__/
 .vscode/
 saved_models/
+saved_runs/
 runs/
+ckpt/
 
 *dataset*
 test*
+
+result.txt
 
 !expand_dataset.py

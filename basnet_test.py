@@ -30,10 +30,10 @@ MODEL_CODE = f'ssp'
 MODE = 'test'
 CUDA_NUM = 3
 IMG_EXT = '.jpg'
-MATCH_CASE = f'{MODEL_CODE}-45'
+MATCH_CASE = f'{MODEL_CODE}-*'
 
-dataset_path = f'/home/zhengang/dataset/{DATASET}'
-target_path = f'/home/zhengang/dataset/prediction/{MODEL_NAME}/{DATASET}/{MODE}'
+dataset_path = f'/home/shenkunye/GangZheng/dataset/{DATASET}'
+target_path = f'/home/shenkunye/GangZheng/dataset/prediction/{MODEL_NAME}/{DATASET}/{MODE}'
 os.makedirs(target_path, exist_ok=True)
 
 os.system(f'cp {dataset_path}/GT_{MODE}/*.png {target_path}')

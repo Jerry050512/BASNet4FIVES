@@ -4,7 +4,7 @@ from torchvision import models
 import torch.nn.functional as F
 
 # from .resnet_model import *
-from .pvt import pvt_small
+from .pvt import pvt_small, pvt_medium, pvt_large
 
 
 class RefUnet(nn.Module):
@@ -161,6 +161,7 @@ class BASNet(nn.Module):
 
         # 1. 替换ResNet34为PVT-Small
         self.pvt = pvt_small()  # 替换原来的ResNet34
+        self.pvt.init_weights('./model/ckpt/pvt_small.pth')
 
         ## -------------Bridge--------------
 
@@ -232,7 +233,29 @@ class BASNet(nn.Module):
         ## -------------Bilinear Upsampling--------------
         # 双线性插值上采样层
         self.upscore = nn.Upsample(size=(224, 224), mode='bilinear')
-        self.upscore2 = nn.Upsample(scale_factor=2, mode='bilinear')
+        self.upscore_x2 = nn.Upsample(scale_factor=2, mode='bilinear')
+        self.upscore_x4 = nn.Upsample(scale_factor=4, mode='bilinear', align_corners=True)
+
+        # 新增分步上采样模块
+        self.convdb_1 = nn.Conv2d(1, 1, 3, padding=1)
+        self.bnbd_1 = nn.BatchNorm2d(1)
+        self.relubd_1 = nn.ReLU(inplace=True)
+
+        self.conv4ub_1 = nn.Conv2d(1, 1, 3, padding=1)
+        self.bn4ub_1 = nn.BatchNorm2d(1)
+        self.relu4ub_1 = nn.ReLU(inplace=True)
+
+        self.conv3ub_1 = nn.Conv2d(1, 1, 3, padding=1)
+        self.bn3ub_1 = nn.BatchNorm2d(1)
+        self.relu3ub_1 = nn.ReLU(inplace=True)
+
+        self.conv2ub_1 = nn.Conv2d(1, 1, 3, padding=1)
+        self.bn2ub_1 = nn.BatchNorm2d(1)
+        self.relu2ub_1 = nn.ReLU(inplace=True)
+
+        self.conv1ub_1 = nn.Conv2d(1, 1, 3, padding=1)
+        self.bn1ub_1 = nn.BatchNorm2d(1)
+        self.relu1ub_1 = nn.ReLU(inplace=True)
 
         ## -------------Side Output--------------
         self.outconvb = nn.Conv2d(512, 1, 3, padding=1)
@@ -243,6 +266,9 @@ class BASNet(nn.Module):
 
         ## -------------Refine Module-------------
         self.refunet = RefUnet(1, 64)
+
+        ## -------------Upsample to 112x112-------------
+        self.upsample_to_112 = nn.Upsample(size=(112, 112), mode='bilinear', align_corners=True)
 
 
     def forward(self,x):
@@ -272,39 +298,100 @@ class BASNet(nn.Module):
         hx = self.relu4d_m(self.bn4d_m(self.conv4d_m(hx)))
         hd4 = self.relu4d_2(self.bn4d_2(self.conv4d_2(hx))) # 320x7x7
 
-        hx = self.upscore2(hd4) # 7 -> 14
+        hx = self.upscore_x2(hd4) # 7 -> 14
 
         hx = self.relu3d_1(self.bn3d_1(self.conv3d_1(torch.cat((hx,h3),1))))
         hx = self.relu3d_m(self.bn3d_m(self.conv3d_m(hx)))
         hd3 = self.relu3d_2(self.bn3d_2(self.conv3d_2(hx))) # 128x14x14
 
-        hx = self.upscore2(hd3) # 14 -> 28
+        hx = self.upscore_x2(hd3) # 14 -> 28
 
         hx = self.relu2d_1(self.bn2d_1(self.conv2d_1(torch.cat((hx,h2),1))))
         hx = self.relu2d_m(self.bn2d_m(self.conv2d_m(hx)))
         hd2 = self.relu2d_2(self.bn2d_2(self.conv2d_2(hx))) # 64x28x28
 
-        hx = self.upscore2(hd2) # 28 -> 56
+        hx = self.upscore_x2(hd2) # 28 -> 56
 
         hx = self.relu1d_1(self.bn1d_1(self.conv1d_1(torch.cat((hx,h1),1))))
         hx = self.relu1d_m(self.bn1d_m(self.conv1d_m(hx)))
         hd1 = self.relu1d_2(self.bn1d_2(self.conv1d_2(hx))) # 64x56x56
 
         ## -------------Side Output-------------
-        db = self.outconvb(hbg)
-        db = self.upscore(db) # 7
+        db = self.outconvb(hbg) # 1x7x7
+        # 分步上采样到224x224
+        db = self.upscore_x2(db)  # 7 -> 14
+        db = self.convdb_1(db)
+        db = self.bnbd_1(db)
+        db = self.relubd_1(db)
+        db = self.upscore_x2(db)  # 14 -> 28
+        db = self.convdb_1(db)
+        db = self.bnbd_1(db)
+        db = self.relubd_1(db)
+        db = self.upscore_x2(db)  # 28 -> 56
+        db = self.convdb_1(db)
+        db = self.bnbd_1(db)
+        db = self.relubd_1(db)
+        db = self.upscore_x2(db)  # 56 -> 112
+        db = self.convdb_1(db)
+        db = self.bnbd_1(db)
+        db = self.relubd_1(db)
+        db = self.upscore_x2(db)  # 112 -> 224
 
-        d4 = self.outconv4(hd4)
-        d4 = self.upscore(d4) # 7
+        d4 = self.outconv4(hd4) # 1x7x7
+        # 分步上采样到224x224
+        d4 = self.upscore_x2(d4)  # 7 -> 14
+        d4 = self.conv4ub_1(d4)
+        d4 = self.bn4ub_1(d4)
+        d4 = self.relu4ub_1(d4)
+        d4 = self.upscore_x2(d4)  # 14 -> 28
+        d4 = self.conv4ub_1(d4)
+        d4 = self.bn4ub_1(d4)
+        d4 = self.relu4ub_1(d4)
+        d4 = self.upscore_x2(d4)  # 28 -> 56
+        d4 = self.conv4ub_1(d4)
+        d4 = self.bn4ub_1(d4)
+        d4 = self.relu4ub_1(d4)
+        d4 = self.upscore_x2(d4)  # 56 -> 112
+        d4 = self.conv4ub_1(d4)
+        d4 = self.bn4ub_1(d4)
+        d4 = self.relu4ub_1(d4)
+        d4 = self.upscore_x2(d4)  # 112 -> 224
 
-        d3 = self.outconv3(hd3)
-        d3 = self.upscore(d3) # 14
+        d3 = self.outconv3(hd3) # 1x14x14
+        # 分步上采样到224x224
+        d3 = self.upscore_x2(d3)  # 14 -> 28
+        d3 = self.conv3ub_1(d3)
+        d3 = self.bn3ub_1(d3)
+        d3 = self.relu3ub_1(d3)
+        d3 = self.upscore_x2(d3)  # 28 -> 56
+        d3 = self.conv3ub_1(d3)
+        d3 = self.bn3ub_1(d3)
+        d3 = self.relu3ub_1(d3)
+        d3 = self.upscore_x2(d3)  # 56 -> 112
+        d3 = self.conv3ub_1(d3)
+        d3 = self.bn3ub_1(d3)
+        d3 = self.relu3ub_1(d3)
+        d3 = self.upscore_x2(d3)  # 112 -> 224
 
-        d2 = self.outconv2(hd2)
-        d2 = self.upscore(d2) # 28
+        d2 = self.outconv2(hd2) # 1x28x28
+        # 分步上采样到224x224
+        d2 = self.upscore_x2(d2)  # 28 -> 56
+        d2 = self.conv2ub_1(d2)
+        d2 = self.bn2ub_1(d2)
+        d2 = self.relu2ub_1(d2)
+        d2 = self.upscore_x2(d2)  # 56 -> 112
+        d2 = self.conv2ub_1(d2)
+        d2 = self.bn2ub_1(d2)
+        d2 = self.relu2ub_1(d2)
+        d2 = self.upscore_x2(d2)  # 112 -> 224
 
-        d1 = self.outconv1(hd1) # 56
-        d1 = self.upscore(d1)
+        d1 = self.outconv1(hd1) # 1x56x56
+        # 分步上采样到224x224
+        d1 = self.upscore_x2(d1)  # 56 -> 112
+        d1 = self.conv1ub_1(d1)
+        d1 = self.bn1ub_1(d1)
+        d1 = self.relu1ub_1(d1)
+        d1 = self.upscore_x2(d1)  # 112 -> 224
 
         ## -------------Refine Module-------------
         dout = self.refunet(d1)

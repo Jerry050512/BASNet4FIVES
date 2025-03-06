@@ -5,7 +5,7 @@ import numpy as np
 
 # TODO: 修改注释
 
-def _iou(pred, target, reduction = 'mean'):
+def _iou(pred, target, reduction = 'mean', eps=1e-6):
     """
     计算预测框和目标框的交并比（IoU）损失。
 
@@ -23,7 +23,7 @@ def _iou(pred, target, reduction = 'mean'):
     for i in range(0, b):
         # 计算第i个预测框和目标框的IoU
         Iand1 = torch.sum(target[i,:,:,:] * pred[i,:,:,:])  # 交集面积
-        Ior1 = torch.sum(target[i,:,:,:]) + torch.sum(pred[i,:,:,:]) - Iand1  # 并集面积
+        Ior1 = torch.sum(target[i,:,:,:]) + torch.sum(pred[i,:,:,:]) - Iand1 + eps  # 并集面积
         IoU1 = Iand1 / Ior1  # 第i个预测框和目标框的IoU
 
         # 计算IoU损失，累加到IoU上
